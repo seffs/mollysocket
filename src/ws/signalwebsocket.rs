@@ -107,6 +107,7 @@ impl SignalWebSocket {
 
     pub async fn connection_loop(&mut self) -> Result<()> {
         let mut count = 0;
+        log::debug!("connection loop");
         loop {
             let instant = Instant::now();
             {
@@ -116,6 +117,7 @@ impl SignalWebSocket {
             if let Err(e) = self.connect(tls::build_tls_connector()?).await {
                 if let Some(tungstenite::Error::Http(resp)) = e.downcast_ref::<tungstenite::Error>()
                 {
+		    log::debug!("resp.status {}", resp.status());
                     if resp.status() == 403 {
                         return Err(e);
                     }
@@ -127,6 +129,7 @@ impl SignalWebSocket {
                 }
             }
             if let Some(tx) = &self.channels.on_reconnection_tx {
+	        log::debug!("unbounded_send(1)");
                 let _ = tx.unbounded_send(1);
             }
             count += 1;
@@ -138,6 +141,7 @@ impl SignalWebSocket {
     fn on_response(&self, response: Option<WebSocketResponseMessage>) {
         log::debug!("New response");
         if response.is_some() {
+	    log::debug!("New response is some");
             let mut keepalive = self.last_keepalive.lock().unwrap();
             *keepalive = Instant::now();
         }
@@ -217,6 +221,7 @@ impl SignalWebSocket {
         request: &WebSocketRequestMessage,
     ) -> WebSocketResponseMessage {
         if self.is_signal_service_envelope(request) {
+            log::debug!("create websocket response OK.");
             return WebSocketResponseMessage {
                 id: request.id,
                 status: Some(200),
@@ -225,6 +230,7 @@ impl SignalWebSocket {
                 body: None,
             };
         }
+	log::debug!("create websocket response 400.");
         WebSocketResponseMessage {
             id: request.id,
             status: Some(400),
