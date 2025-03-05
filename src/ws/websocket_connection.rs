@@ -19,8 +19,8 @@ use super::proto_websocketresources::{
     web_socket_message::Type, WebSocketMessage, WebSocketRequestMessage, WebSocketResponseMessage,
 };
 
-const KEEPALIVE: Duration = Duration::from_secs(30);
-const KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(40);
+const KEEPALIVE: Duration = Duration::from_secs(10);
+const KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[async_trait(?Send)]
 pub trait WebSocketConnection {
@@ -89,8 +89,8 @@ pub trait WebSocketConnection {
         select!(
             _ = to_ws_handle => log::warn!("Messages finished"),
             _ = from_ws_handle => log::warn!("Websocket finished"),
-            _ = from_keepalive_handle => log::warn!("Keepalive finished"),
-            _ = to_keepalive_handle => log::warn!("Keepalive finished"),
+            _ = from_keepalive_handle => log::warn!("Keepalive:from finished"),
+            _ = to_keepalive_handle => log::warn!("Keepalive:to finished"),
         );
         Ok(())
     }
@@ -108,6 +108,7 @@ pub trait WebSocketConnection {
     }
 
     async fn send_message(&self, message: WebSocketMessage) {
+        log::debug!("Send Message");
         if let Some(mut tx) = self.get_websocket_tx().as_ref() {
             let bytes = message.encode_to_vec();
             tx.send(tungstenite::Message::binary(bytes)).await.unwrap();
@@ -115,6 +116,7 @@ pub trait WebSocketConnection {
     }
 
     async fn send_response(&self, response: WebSocketResponseMessage) {
+        log::debug!("Send Response");
         let message = WebSocketMessage {
             r#type: Some(Type::Response as i32),
             response: Some(response),
@@ -144,14 +146,16 @@ pub trait WebSocketConnection {
         self.send_message(message).await;
     }
 
-    async fn loop_keepalive(&self, timer_tx: mpsc::UnboundedSender<bool>) {
+async fn loop_keepalive(&self, timer_tx: mpsc::UnboundedSender<bool>) {
+        log::debug!("start loop keepalive");
         // Get the ref of last_keepalive
+        // time::sleep(Duration::from_secs(10)).await;
         let last_keepalive = self.get_last_keepalive();
         loop {
             // read last_keepalive
             if last_keepalive.lock().unwrap().elapsed() > KEEPALIVE_TIMEOUT {
-                log::warn!("Did not receive the last keepalive: aborting.");
-                break;
+                log::warn!("Did not receive the last keepalive: but not aborting.");
+                // break;
             }
             time::sleep(KEEPALIVE).await;
             log::debug!("Sending Keepalive");
